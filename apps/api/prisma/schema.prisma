@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum FoodUnit {
+  G
+  ML
+  PIECE
+  SERVING
+  CUP
+  TBSP
+  TSP
+  OZ
+}
+
+enum EntrySource {
+  MANUAL
+  IMAGE
+  PDF
+  CHAT
+  AI_ESTIMATE
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+/// No timestamps anywhere that code does not read. What survives is state the
+/// app depends on: token validity, conversation recency, and soft deletes.
+model User {
+  id           String @id @default(uuid()) @db.Uuid
+  email        String @unique
+  passwordHash String @map("password_hash")
+  name         String
+
+  refreshTokens RefreshToken[]
+  goals         Goal[]
+  weightLogs    WeightLog[]
+  foodEntries   FoodEntry[]
+  conversations Conversation[]
+
+  @@map("users")
+}
+
+/// Stored so logout actually invalidates a session and so token reuse is
+/// detectable. Only the SHA-256 hash is kept, never the token itself.
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// Goals are versioned, never edited. Changing a target inserts a new row with a
+/// later effectiveFrom, so a past goal-vs-actual chart keeps comparing against
+/// the goal that was actually active then.
+model Goal {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  dailyCalories  Int      @map("daily_calories")
+  proteinG       Float    @map("protein_g")
+  carbsG         Float    @map("carbs_g")
+  fatG           Float    @map("fat_g")
+  targetWeightKg Float?   @map("target_weight_kg")
+  effectiveFrom  DateTime @map("effective_from") @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, effectiveFrom])
+  @@index([userId, effectiveFrom(sort: Desc)])
+  @@map("goals")
+}
+
+/// What gives targetWeightKg something to compare against. One weight per day;
+/// logging the same day again overwrites it.
+model WeightLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  measuredOn DateTime @map("measured_on") @db.Date
+  weightKg   Float    @map("weight_kg")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, measuredOn])
+  @@index([userId, measuredOn(sort: Desc)])
+  @@map("weight_logs")
+}
+
+/// entryDate is the day the food was eaten, chosen by the user. It is a date, not
+/// a timestamp, so backfilling and historical imports work and every report is
+/// free of timezone arithmetic.
+///
+/// Nutrition values are totals for the logged quantity, not per 100 g, so every
+/// report is a plain SUM.
+model FoodEntry {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  entryDate DateTime    @map("entry_date") @db.Date
+  mealType  MealType    @map("meal_type")
+  foodName  String      @map("food_name")
+  quantity  Float
+  unit      FoodUnit
+  calories  Float
+  proteinG  Float       @map("protein_g")
+  carbsG    Float       @map("carbs_g")
+  fatG      Float       @map("fat_g")
+  micros    Json        @default("{}")
+  source    EntrySource @default(MANUAL)
+  deletedAt DateTime?   @map("deleted_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entryDate(sort: Desc)])
+  @@index([userId, mealType, entryDate(sort: Desc)])
+  @@map("food_entries")
+}
+
+model Conversation {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  title     String
+  /// Read by the sidebar, which lists conversations by recency.
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+/// One row per message, append-only. `seq` orders the thread, which is why no
+/// timestamp is needed. `content` holds provider-neutral blocks so history
+/// survives a change of LLM provider.
+model ChatMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  seq            Int
+  role           ChatRole
+  content        Json
+  tokenCount     Int?     @map("token_count")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, seq])
+  @@map("chat_messages")
+}

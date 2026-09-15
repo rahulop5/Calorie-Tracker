@@ -1,0 +1,24 @@
+{
+  "name": "calorie-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.19"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @tracker/api",
+    "db:generate": "npm run db:generate -w @tracker/api",
+    "db:studio": "npm run db:studio -w @tracker/api",
+    "test": "npm run test --workspaces --if-present",
+    "dev": "npm run dev -w @tracker/api"
+  }
+}

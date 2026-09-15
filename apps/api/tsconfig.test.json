@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "comment": "vitest.config.ts is left out: it imports the ESM-only vitest/config, and Vitest type-checks it when it loads.",
+  "include": ["src", "test", "prisma.config.ts"]
+}
