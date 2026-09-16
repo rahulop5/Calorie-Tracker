@@ -142,6 +142,7 @@ export const chatRoutes: FastifyPluginAsyncZod = async (app) => {
       const userId = getUserId(request);
 
       reply.raw.writeHead(200, {
+        ...(reply.getHeaders() as Record<string, any>),
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache, no-transform',
         connection: 'keep-alive',
