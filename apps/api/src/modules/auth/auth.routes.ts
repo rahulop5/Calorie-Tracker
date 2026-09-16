@@ -33,7 +33,12 @@ function setRefreshCookie(reply: FastifyReply, session: AuthSession): void {
 }
 
 function clearRefreshCookie(reply: FastifyReply): void {
-  reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+  reply.clearCookie(REFRESH_COOKIE, {
+    path: REFRESH_COOKIE_PATH,
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+  });
 }
 
 export const authRoutes: FastifyPluginAsyncZod = async (app) => {
